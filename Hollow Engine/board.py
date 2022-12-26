@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 class Board ():
   
@@ -38,10 +39,12 @@ class Board ():
 
     self.move_log = []
 
-    self.white_casltes = [True, True]
-    self.black_casltes = [True, True]
+    self.currentCastlingRight = CastleRights(True, True, True, True)
+    self.castleRightsLog = [CastleRights(self.currentCastlingRight.wks, self.currentCastlingRight.bks, self.currentCastlingRight.wqs, self.currentCastlingRight.bqs)]
 
     #self.initialize_pieces()
+    
+    ('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
     self.load_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 
     self.color = "w"
@@ -72,7 +75,6 @@ class Board ():
 
     # Set the active color according to the color component of the FEN string
     self.color = 'w'
-    self.update_caslte_rights()
     # Update the occupied squares and attacked bitboards
     self.update_attacked_occupied_sqaures()
 
@@ -114,7 +116,6 @@ class Board ():
     self.color = color
 
     # Update the occupied squares and attacked bitboards
-    self.update_caslte_rights()
     self.update_attacked_occupied_sqaures()
   
   def find_piece(self, square):
@@ -159,122 +160,107 @@ class Board ():
     index = 1 << (row * 8 + col)
     return index
 
-  def update_caslte_rights(self):
-    if self.color == 'w' and (self.white_casltes[0] or self.white_casltes[1]):
-      if self.bitboards['K'] != 16:
-        self.white_casltes = (False, False)
-      else:
-        if not self.bitboards['R'] & 1:
-          print('white queen is false')
-          self.white_casltes[0] = False
-        if not self.bitboards['R'] & 128:
-          self.white_casltes[1] = False
-    elif self.color == 'b' and (self.black_casltes[0] or self.black_casltes[1]):
-      if self.bitboards['k'] != 1152921504606846976:
-        self.black_casltes = (False, False)
-      else:
-        if not self.bitboards['r'] & 72057594037927936:
-          self.black_casltes[0] = False
-        if not self.bitboards['r'] & 9223372036854775808:
-          self.black_casltes[1] = False
+  def update_castle_rights(self, move):
+        file_a = 0x101010101010101
+        file_h = 0x8080808080808080
 
-  def generate_caslte_moves(self):
-    self.update_caslte_rights()
-    self.update_attacked_occupied_sqaures()
+        if move[2] == 'K':
+            self.currentCastlingRight.wks = False
+            self.currentCastlingRight.wqs = False
+        elif  move[2] == 'k':
+            self.currentCastlingRight.bks = False
+            self.currentCastlingRight.bqs = False
+        elif  move[2] == 'R':
+                if move[0] &  file_a:
+                    self.currentCastlingRight.wqs = False
+                elif move[0] & file_h:
+                    self.currentCastlingRight.wks = False
+        elif  move[2] == 'r':
+                if move[0] &  file_a:
+                    self.currentCastlingRight.bqs = False
+                elif move[0] & file_h:
+                    self.currentCastlingRight.bks = False
 
-    moves = []
+  def __repr__(self):
+    return self.currentCastlingRight
 
+  def getCastleMoves(self, moves):
+        if self.in_check(self.color):
+            return
+        if (self.color == 'w' and self.currentCastlingRight.wks) or (self.color == 'b' and self.currentCastlingRight.bks):
+            self.getKingsideCastleMoves(moves)
+        if (self.color == 'w' and self.currentCastlingRight.wqs) or (self.color == 'b' and self.currentCastlingRight.bqs):
+            self.getQueensideCastleMoves(moves)
+        
+  def getKingsideCastleMoves(self, moves):
     if self.color == 'w':
-      if self.white_casltes[0] != False:
-        if not self.attacked_black_sqaures & 12 and not self.occupied_white_sqaures & 14:
-          moves.append((16, 4, 'K', True))
-      if self.white_casltes[1] != False:
         if not self.attacked_black_sqaures & 96 and not self.occupied_white_sqaures & 96:
           moves.append((16, 64, 'K', True))
     else:
-      if self.black_casltes[0] != False:
-        if not self.attacked_white_sqaures & 864691128455135232 and not self.occupied_black_sqaures & 1008806316530991104:
-          moves.append((1152921504606846976, 288230376151711744, 'k', True))
-      if self.white_casltes[1] != False:
         if not self.attacked_white_sqaures & 6917529027641081856 and not self.occupied_black_sqaures & 6917529027641081856:
           moves.append((1152921504606846976, 4611686018427387904, 'k', True))
-
-    return moves
+ 
+  def getQueensideCastleMoves(self, moves):
+    if self.color == 'w':
+        if not self.attacked_black_sqaures & 12 and not self.occupied_white_sqaures & 14:
+          moves.append((16, 4, 'K', True))
+    else:
+        if not self.attacked_white_sqaures & 864691128455135232 and not self.occupied_black_sqaures & 1008806316530991104:
+          moves.append((1152921504606846976, 288230376151711744, 'k', True)) 
 
   def make_move(self, current_position, move, piece_name, caslte=False):
 
-    king_bitboard = self.bitboards['k'] | self.bitboards['K']
-
-    if current_position & king_bitboard and move & 4899916394579099716:
-      caslte = True
 
     piece_captured = None
 
     enemy_occupied_sqaures = self.occupied_black_sqaures if self.color == 'w' else self.occupied_white_sqaures
 
     mask = ~current_position
-    if caslte == False:
 
-      if move & enemy_occupied_sqaures:
-        piece_captured = self.find_piece(move)
-        self.bitboards[self.find_piece(move)] &= ~move
+
+    if move & enemy_occupied_sqaures:
+      piece_captured = self.find_piece(move)
+      self.bitboards[self.find_piece(move)] &= ~move
       
-      if piece_name == 'P' and move & 0xff00000000000000:
+    if piece_name == 'P' and move & 0xff00000000000000:
+      self.bitboards[piece_name] &= mask
+      self.bitboards['Q'] |= move
+      piece_name = piece_name + 'Q'
 
-        self.bitboards[piece_name] &= mask
+    elif piece_name == 'p' and move & 0x00000000000000ff:
+      self.bitboards[piece_name] &= mask
+      self.bitboards['q'] |= move
+      piece_name = piece_name + 'q'
 
-        self.bitboards['Q'] |= move
-
-        piece_name = piece_name + 'Q'
-
-      elif piece_name == 'p' and move & 0x00000000000000ff:
-
-        self.bitboards[piece_name] &= mask
-
-        self.bitboards['q'] |= move
-
-        piece_name = piece_name + 'q'
-
-      else:
-
-        self.bitboards[piece_name] &= mask
-
-        self.bitboards[piece_name] |= move
     else:
-      print('is king move')
-      if move == 4:
-        self.bitboards[piece_name] &= mask
-        self.bitboards[piece_name] |= move
-
-        self.bitboards['R'] &= ~1
-
-        self.bitboards['R'] |= 8
-      if move == 64:
-        print('castling king side white')
-        self.bitboards[piece_name] &= mask
-        self.bitboards[piece_name] |= move
-
-        self.bitboards['R'] &= ~128 
-
-        self.bitboards['R'] |= 32
-      if move == 288230376151711744:
-
-        self.bitboards[piece_name] &= mask
-        self.bitboards[piece_name] |= move
-
-        self.bitboards['r'] &= ~72057594037927936
-
-        self.bitboards['r'] |= 576460752303423488
-      if move == 4611686018427387904:
-        self.bitboards[piece_name] &= mask
-        self.bitboards[piece_name] |= move
-
-        self.bitboards['r'] &= ~9223372036854775808 
-
-        self.bitboards['r'] |= 2305843009213693952
+      self.bitboards[piece_name] &= mask
+      self.bitboards[piece_name] |= move   
 
     self.move_log.append((current_position, move, piece_name, piece_captured, caslte))
+    
     # Clear the bit in the current position bitboard
+    if caslte == True:
+      if move & 4629771061636907072:
+        #move king side rook
+        if self.color == 'w':
+          self.bitboards['R'] &= ~128
+          self.bitboards['R'] |= 32
+        else:
+          self.bitboards['r'] &= ~9223372036854775808
+          self.bitboards['r'] |= 2305843009213693952
+      if move & 289360691352306692:
+        #move queen side rook
+        if self.color == 'w':
+          self.bitboards['R'] &= ~1
+          self.bitboards['R'] |= 8
+        else:
+          self.bitboards['r'] &= ~72057594037927936
+          self.bitboards['r'] |= 576460752303423488
+
+    self.update_castle_rights((current_position, move, piece_name))
+    self.castleRightsLog.append(CastleRights(self.currentCastlingRight.wks, self.currentCastlingRight.bks, 
+                                               self.currentCastlingRight.wqs, self.currentCastlingRight.bqs))    
+
 
     self.color = 'w' if self.color == 'b' else 'b'
 
@@ -286,53 +272,39 @@ class Board ():
       current_position, move, piece_name, piece_captured, castle = self.move_log.pop()
       # Clear the bit in the move bitboard
       mask = ~move
-      if castle != True:
-        if len(piece_name) > 1:
+      if len(piece_name) > 1:
           self.bitboards[piece_name[1]] &= mask
           piece_name = piece_name[:-1]
 
         # Update the piece's bitboard
-        self.bitboards[piece_name] &= mask
-        self.bitboards[piece_name] |= current_position
+      self.bitboards[piece_name] &= mask
+      self.bitboards[piece_name] |= current_position
         
-        if piece_captured != None:
+      if piece_captured != None:
           self.bitboards[piece_captured] |= move
-      else:
-        if move == 4:
-          self.white_casltes[0] = True
-          self.bitboards[piece_name] &= mask
 
-          self.bitboards[piece_name] |= current_position
-          self.bitboards['R'] &= ~8
+      self.castleRightsLog.pop()
+      castle_rights = copy.deepcopy(self.castleRightsLog[-1])
+      self.currentCastlingRight = castle_rights
 
-          self.bitboards['R'] |= 1
-        if move == 64:
-          self.white_casltes[1] = True
-          self.bitboards[piece_name] &= mask
-
-          self.bitboards[piece_name] |= current_position
-
-          self.bitboards['R'] &= ~32
-
-          self.bitboards['R'] |= 1
-        if move == 288230376151711744:
-          self.black_casltes[0] = True
-          self.bitboards[piece_name] &= mask
-
-          self.bitboards[piece_name] |= current_position
-
-          self.bitboards['r'] &= ~576460752303423488 
-
-          self.bitboards['r'] |= 72057594037927936
-        if move == 4611686018427387904:
-          self.black_casltes[1] = True
-          self.bitboards[piece_name] &= mask
-
-          self.bitboards[piece_name] |= current_position
-
-          self.bitboards['r'] &= ~2305843009213693952
-
-          self.bitboards['r'] |= 9223372036854775808
+      if castle == True:
+        if move & 4629771061636907072:
+          #move king side rook
+          if self.color == 'w':
+            self.bitboards['R'] &= ~32 
+            self.bitboards['R'] |= 128
+          else:
+            self.bitboards['r'] &= ~2305843009213693952 
+            self.bitboards['r'] |= 9223372036854775808
+        if move & 289360691352306692:
+          #move queen side rook
+          if self.color == 'w':
+            self.bitboards['R'] &= ~8
+            self.bitboards['R'] |= 1
+          else:
+            self.bitboards['r'] &= ~576460752303423488 
+            self.bitboards['r'] |= 72057594037927936
+        
       
       # Update the occupied squares bitboard
       self.checkmate = False
@@ -371,7 +343,9 @@ class Board ():
 
   def get_all_valid_moves(self):
     all_moves = self.get_all_posible_moves(self.color)
+    temoCastleRighes = CastleRights(self.currentCastlingRight.wks, self.currentCastlingRight.bks, self.currentCastlingRight.wqs, self.currentCastlingRight.bqs)
     valid_moves = []
+    self.getCastleMoves(valid_moves)
     for move in all_moves:
         current_position = move[0]
         piece_name = move[2]
@@ -389,17 +363,15 @@ class Board ():
               self.undo_move()
     
             mask <<= 1
-    
-    if not self.in_check(self.color):
-      castle_moves = self.generate_caslte_moves()
-      for m in castle_moves:
-        valid_moves.append(m)
 
     if(len(valid_moves) == 0):
             if(self.in_check(self.color)):
                 self.checkmate = True
             else:
                 self.stalemate = True
+
+    self.currentCastlingRight = temoCastleRighes
+
     return valid_moves
 
   def in_check(self, color):
@@ -724,8 +696,9 @@ class Board ():
     return moves
   ###PIECE MOVES###
 
-
-
-
-
-  
+class CastleRights():
+    def __init__(self, wks, bks, wqs, bqs):
+        self.wks = wks
+        self.bks = bks
+        self.wqs = wqs
+        self.bqs = bqs
