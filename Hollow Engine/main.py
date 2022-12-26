@@ -99,10 +99,6 @@ def drawBoard(screen):
             color = colors[((file + rank) % 2)]
             pygame.draw.rect(screen, color, pygame.Rect(rank*Sq_Size, file*Sq_Size, Sq_Size, Sq_Size))
 
-
-def hight_sqrs(screen):
-    pass
-
 def draw_game_state(screen, bitboard, gs, validMoves, sqSelected):
     drawBoard(screen)
     highlightSqrs(screen, gs, validMoves, sqSelected)
@@ -179,7 +175,10 @@ def main():
                         move = (playerClicks[0], playerClicks[1], gs.find_piece(playerClicks[0]))
                         for i in validMoves:
                             if move[0] == i[0] and move[1] == i[1] and move[2] == i[2]:
-                                gs.make_move(i[0], i[1], i[2])
+                                try:
+                                    gs.make_move(i[0], i[1], i[2], i[3])
+                                except:
+                                    gs.make_move(i[0], i[1], i[2])
                                 moveMade = True 
                                 sqSelected = ()
                                 playerClicks = []
@@ -193,8 +192,11 @@ def main():
                 AIMove = engine.findBestMove(gs, validMoves, False)
                 if AIMove is None:
                     AIMove = engine.findRandomMove(validMoves)
-                gs.make_move(AIMove[0], AIMove[1], AIMove[2])
-                print('current board evaluation:', engine.evaluate(gs))
+                try:
+                                    gs.make_move(AIMove[0], AIMove[1], AIMove[2], AIMove[3])
+                except:
+                                    gs.make_move(AIMove[0], AIMove[1], AIMove[2])
+                print('current board evaluation:', engine.evaluate(gs) * .01)
                 moveMade = True
                 AIThinking = False
                 MoveUndun = False 
@@ -241,6 +243,5 @@ def main():
 # Clean up Pygame
 main()
 pygame.quit()
-
 
 
